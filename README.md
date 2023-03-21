@@ -17,3 +17,49 @@ yarn
 yarn build
 yarn deploy
 ```
+
+
+## auth0 쪽 설정
+login action 에 `Redirect to consent` 라는 제목으로 아래와 같은 커스텀 액션을 등록한다.
+secrets 에 `CONSENT_FORM_URL` 라는 이름으로 약관 동의 페이지 url 을 등록한다.
+```javascript
+/**
+* Handler that will be called during the execution of a PostLogin flow.
+*
+* @param {Event} event - Details about the user and the context in which they are logging in.
+* @param {PostLoginAPI} api - Interface whose methods can be used to change the behavior of the login.
+*/
+exports.onExecutePostLogin = async (event, api) => {
+  const { consentGiven } = event.user.user_metadata || {};
+
+  // redirect to consent form if user has not yet consented
+  if (!consentGiven) {
+    const options = {
+      query: {
+        auth0_domain: `${event.tenant.id}.auth0.com`,
+      },
+    };
+    api.redirect.sendUserTo(event.secrets.CONSENT_FORM_URL, options);
+  }
+};
+
+/**
+* Handler that will be invoked when this action is resuming after an external redirect. If your
+* onExecutePostLogin function does not perform a redirect, this function can be safely ignored.
+*
+* @param {Event} event - Details about the user and the context in which they are logging in.
+* @param {PostLoginAPI} api - Interface whose methods can be used to change the behavior of the login.
+*/
+// exports.onContinuePostLogin = async (event, api) => {
+// };
+
+exports.onContinuePostLogin = async (event, api) => {
+  if (event.request.body.confirm === "yes") {
+    api.user.setUserMetadata("consentGiven", true);
+    api.user.setUserMetadata("consentTimestamp", Date.now());
+    return;
+  } else {
+    return api.access.deny("User did not consent");
+  }
+};
+```
